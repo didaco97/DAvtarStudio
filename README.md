@@ -67,7 +67,7 @@ Download the project checkpoints and sample video with:
 
 That script uses the Google Drive IDs embedded in the script. If it cannot access Google Drive, download the upstream model checkpoints manually and place them at the paths above.
 
-The HD path also needs the Real-ESRGAN `RealESRGAN_x4plus` and GFPGAN weights. They may download automatically on the first HD job into `Real-ESRGAN/weights/` and the installed GFPGAN weights directory. Run one HD job while online before using the application offline.
+The setup script also performs a zero-image Real-ESRGAN probe. That probe initializes the HD model loader and downloads the `RealESRGAN_x4plus`, GFPGAN, and face-helper weights during installation, without processing a video. It verifies `RealESRGAN_x4plus.pth`, `GFPGANv1.3.pth`, `detection_Resnet50_Final.pth`, and `parsing_parsenet.pth` before completing. If setup is interrupted, rerun it while online before using HD mode offline.
 
 ## Start the web application
 
@@ -231,9 +231,9 @@ The application detects the project-local `imageio-ffmpeg` binary and a system/W
 
 Inspect the Backend runtime terminal or `/api/logs/recent`. The final error identifies the failed stage. Check that inputs are non-empty and all animation-model checkpoints exist.
 
-### The first HD job fails or is very slow
+### The setup script fails while downloading HD weights
 
-Real-ESRGAN/GFPGAN may be downloading weights. Keep the first HD job online and inspect the weights directories afterward.
+Keep the machine online and rerun `.\setup.ps1`. Check that `Real-ESRGAN\weights\RealESRGAN_x4plus.pth` and the GFPGAN weight under `venv\Lib\site-packages\gfpgan\weights\` exist before starting the app.
 
 ### CUDA out of memory
 
