@@ -1,8 +1,54 @@
 # DAvtar Studio
 
+<p align="center">
+  <img src="docs/assets/davtar-banner.svg" alt="DAvtar Studio — AI avatar animation studio" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/didaco97/DAvtarStudio"><img src="https://img.shields.io/badge/DAvtar-Studio-6d5dfc?style=for-the-badge" alt="DAvtar Studio"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10--3.12-3776ab?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.10 to 3.12"></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/API-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI"></a>
+</p>
+
 DAvtar creates lip-synced avatar videos from a face video and an audio track. It provides a FastAPI web UI and a command-line workflow.
 
 The standard path produces a draft MP4. The HD path extracts those frames, enhances them with Real-ESRGAN/GFPGAN, and stitches them into an H.264/AAC MP4.
+
+## Visual workflow
+
+```mermaid
+flowchart LR
+    A[Face video] --> C[DAvtar pipeline]
+    B[Audio track] --> C
+    C --> D[Draft MP4]
+    C --> E{HD enhancement?}
+    E -- No --> D
+    E -- Yes --> F[Real-ESRGAN + GFPGAN]
+    F --> G[Enhanced MP4]
+    D --> H[Browser preview / download]
+    G --> H
+    style C fill:#6d5dfc,color:#fff,stroke:#b86cff,stroke-width:2px
+    style F fill:#1e2448,color:#fff,stroke:#68e5ff
+    style H fill:#102d35,color:#fff,stroke:#68e5ff
+```
+
+```mermaid
+sequenceDiagram
+    participant U as Browser
+    participant A as FastAPI
+    participant P as Pipeline
+    participant O as Output store
+    U->>A: POST /api/generate
+    A-->>U: job_id
+    A->>P: Queue one serialized job
+    P-->>A: Structured runtime events
+    A-->>U: SSE /api/logs/stream
+    P->>O: Publish MP4 (+faststart)
+    U->>A: GET /api/status/{job_id}
+    A-->>U: completed + result_url
+```
+
+<p align="center"><sub>One clean path from a face, a voice, and an idea to a ready-to-share avatar video.</sub></p>
 
 ## Requirements
 
@@ -254,3 +300,10 @@ The `weights_only=False` message is a security warning, not a generation error. 
 ## Acknowledgements
 
 This project combines upstream lip-sync, Real-ESRGAN, GFPGAN, BasicSR, face-parsing, and face-detection projects. Review their original licenses and model terms before redistribution or commercial use.
+
+---
+
+<p align="center">
+  <strong>Developed by Dhiraj Dahale</strong><br>
+  <sub>DAvtar Studio · Voice • Motion • Identity</sub>
+</p>
