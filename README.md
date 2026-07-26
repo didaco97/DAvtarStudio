@@ -304,6 +304,6 @@ This project combines upstream lip-sync, Real-ESRGAN, GFPGAN, BasicSR, face-pars
 ---
 
 <p align="center">
-  <strong>Developed by Dhiraj Dahale</strong><br>
+  <strong></strong><br>
   <sub>DAvtar Studio · Voice • Motion • Identity</sub>
 </p>
