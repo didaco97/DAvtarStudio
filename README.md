@@ -20,9 +20,10 @@ The application has no authentication and binds to `0.0.0.0:8000`. Keep it on a 
 
 ## Installation
 
-Open PowerShell in the repository:
+Clone the repository and open PowerShell in the cloned project:
 
-    cd <project-root>
+    git clone https://github.com/didaco97/DAvtarStudio.git
+    cd DAvtarStudio
 
 Create and activate a virtual environment:
 
