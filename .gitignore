@@ -1,0 +1,29 @@
+# Local environments and Python caches
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Downloaded model weights (keep only documentation in these directories)
+checkpoints/*.pth
+checkpoints/*.state
+Real-ESRGAN/weights/*.pth
+Real-ESRGAN/gfpgan/weights/*.pth
+
+# Runtime inputs, intermediates, and generated media
+data/*
+frames_wav2lip/*
+frames_hd/*
+input_audios/*
+input_videos/*
+output_videos_wav2lip/*
+output_videos_hd/*
+temp/*
+videos/*
+server*.log
+
+# Preserve checked-in directory documentation
+!input_videos/README.md
+!temp/README.md
+!checkpoints/readme.md

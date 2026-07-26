@@ -6,9 +6,9 @@ from tqdm import tqdm
 from glob import glob
 import torch, face_detection
 from wav2lip_models import Wav2Lip
-import platform
 from face_parsing import init_parser, swap_regions
 from basicsr.apply_sr import init_sr_model, enhance
+from media_tools import get_ffmpeg_executable, require_nonempty_file
 
 parser = argparse.ArgumentParser(description='Inference code to lip-sync videos in the wild using Wav2Lip models')
 
@@ -77,8 +77,29 @@ parser.add_argument('--image_prefix', type=str, default="",
 args = parser.parse_args()
 args.img_size = 96
 
-if os.path.isfile(args.face) and args.face.split('.')[1] in ['jpg', 'png', 'jpeg']:
+is_static_image = os.path.splitext(args.face)[1].lower() in ['.jpg', '.png', '.jpeg']
+if os.path.isfile(args.face) and is_static_image:
 	args.static = True
+
+
+def mux_audio(video_path, audio_path, output_path):
+	os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+	subprocess.run([
+		get_ffmpeg_executable(), '-y',
+		'-i', video_path,
+		'-i', audio_path,
+		'-map', '0:v:0',
+		'-map', '1:a:0',
+		'-c:v', 'libx264',
+		'-crf', '18',
+		'-preset', 'medium',
+		'-c:a', 'aac',
+		'-pix_fmt', 'yuv420p',
+		'-movflags', '+faststart',
+		'-shortest',
+		output_path,
+	], check=True)
+	require_nonempty_file(output_path, 'Muxed video')
 
 def get_smoothened_boxes(boxes, T):
 	for i in range(len(boxes)):
@@ -211,13 +232,16 @@ def load_model(path):
 	return model.eval()
 
 def read_frames():
-	if args.face.split('.')[1] in ['jpg', 'png', 'jpeg']:
+	if is_static_image:
 		face = cv2.imread(args.face)
+		if face is None:
+			raise RuntimeError(f'Could not read input image: {args.face}')
 		while 1:
 			yield face
 
 	video_stream = cv2.VideoCapture(args.face)
-	fps = video_stream.get(cv2.CAP_PROP_FPS)
+	if not video_stream.isOpened():
+		raise RuntimeError(f'Could not open input video: {args.face}')
 
 	print('Reading video frames from start...')
 
@@ -241,22 +265,35 @@ def read_frames():
 		yield frame
 
 def main():
+	# Ensure required directories exist
+	for d in ['temp', 'data/gt', 'data/lq']:
+		os.makedirs(d, exist_ok=True)
+	for stale_path in ['temp/result.avi', args.outfile]:
+		if os.path.isfile(stale_path):
+			os.remove(stale_path)
+
 	if not os.path.isfile(args.face):
 		raise ValueError('--face argument must be a valid path to video/image file')
 
-	elif args.face.split('.')[1] in ['jpg', 'png', 'jpeg']:
+	elif is_static_image:
 		fps = args.fps
 	else:
 		video_stream = cv2.VideoCapture(args.face)
+		if not video_stream.isOpened():
+			raise RuntimeError(f'Could not open input video: {args.face}')
 		fps = video_stream.get(cv2.CAP_PROP_FPS)
 		video_stream.release()
+	if not fps or not np.isfinite(fps) or fps <= 0:
+		raise RuntimeError(f'Input has an invalid frame rate: {fps}')
 
 
-	if not args.audio.endswith('.wav'):
+	if not args.audio.lower().endswith('.wav'):
 		print('Extracting raw audio...')
-		command = 'ffmpeg -y -i {} -strict -2 {}'.format(args.audio, 'temp/temp.wav')
-
-		subprocess.call(command, shell=True)
+		subprocess.run([
+			get_ffmpeg_executable(), '-y', '-i', args.audio,
+			'-vn', '-acodec', 'pcm_s16le', '-ar', '16000', 'temp/temp.wav'
+		], check=True)
+		require_nonempty_file('temp/temp.wav', 'Extracted audio')
 		args.audio = 'temp/temp.wav'
 
 	wav = audio.load_wav(args.audio, 16000)
@@ -292,11 +329,13 @@ def main():
 	for i, (img_batch, mel_batch, frames, coords) in enumerate(tqdm(gen, 
 											total=int(np.ceil(float(len(mel_chunks))/batch_size)))):
 		if i == 0:
-			print("Loading segmentation network...")
-			seg_net = init_parser(args.segmentation_path)
+			if not args.no_segmentation:
+				print("Loading segmentation network...")
+				seg_net = init_parser(args.segmentation_path)
 
-			print("Loading super resolution model...")
-			sr_net = init_sr_model(args.sr_path)
+			if not args.no_sr:
+				print("Loading super resolution model...")
+				sr_net = init_sr_model(args.sr_path)
 
 			model = load_model(args.checkpoint_path)
 			print ("Model loaded")
@@ -304,6 +343,8 @@ def main():
 			frame_h, frame_w = next(read_frames()).shape[:-1]
 			out = cv2.VideoWriter('temp/result.avi', 
 									cv2.VideoWriter_fourcc(*'DIVX'), fps, (frame_w, frame_h))
+			if not out.isOpened():
+				raise RuntimeError('Could not open the intermediate video writer')
 
 		img_batch = torch.FloatTensor(np.transpose(img_batch, (0, 3, 1, 2))).to(device)
 		mel_batch = torch.FloatTensor(np.transpose(mel_batch, (0, 3, 1, 2))).to(device)
@@ -341,18 +382,15 @@ def main():
 
 	out.release()
 
-	command = 'ffmpeg -y -i {} -i {} -strict -2 -q:v 1 {}'.format(args.audio, 'temp/result.avi', args.outfile)
-	subprocess.call(command, shell=platform.system() != 'Windows')
+	require_nonempty_file('temp/result.avi', 'Intermediate video')
+	mux_audio('temp/result.avi', args.audio, args.outfile)
 
 	if args.save_frames and args.save_as_video:
 		gt_out.release()
 		pred_out.release()
 
-		command = 'ffmpeg -y -i {} -i {} -strict -2 -q:v 1 {}'.format(args.audio, 'temp/gt.avi', args.gt_path)
-		subprocess.call(command, shell=platform.system() != 'Windows')
-
-		command = 'ffmpeg -y -i {} -i {} -strict -2 -q:v 1 {}'.format(args.audio, 'temp/pred.avi', args.pred_path)
-		subprocess.call(command, shell=platform.system() != 'Windows')
+		mux_audio('temp/gt.avi', args.audio, args.gt_path)
+		mux_audio('temp/pred.avi', args.audio, args.pred_path)
 
 
 if __name__ == '__main__':

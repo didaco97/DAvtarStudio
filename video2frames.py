@@ -15,10 +15,14 @@ args = parser.parse_args()
 # Read the video file
 video_path = args.input_video
 video = cv2.VideoCapture(video_path)
+if not video.isOpened():
+    raise RuntimeError(f"Could not open input video: {video_path}")
 
 # Get the frames per second (fps) and duration of the video
-fps = int(video.get(cv2.CAP_PROP_FPS))
 duration = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+if duration <= 0:
+    video.release()
+    raise RuntimeError(f"Input video contains no readable frames: {video_path}")
 
 # Create a folder to store the extracted frames
 frame_folder = args.frames_path
@@ -34,8 +38,14 @@ for i in range(duration):
         break
     # Save the frame as an image file in the frame folder
     frame_file = os.path.join(frame_folder, f'frame_{frame_index:05d}.jpg')
-    cv2.imwrite(frame_file, frame)
+    if not cv2.imwrite(frame_file, frame):
+        video.release()
+        raise RuntimeError(f"Could not write extracted frame: {frame_file}")
     frame_index += 1
+
+if frame_index == 0:
+    video.release()
+    raise RuntimeError(f"No frames were extracted from: {video_path}")
 
 print("Frames extracted and stored at ", args.frames_path)
 # Release the video object

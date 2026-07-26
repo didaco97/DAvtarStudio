@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DAvtar Studio</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎬</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="background-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+
+    <main class="container glass-panel">
+        <header class="app-header">
+            <h1>DAvtar <span>Studio</span></h1>
+            <p>High-fidelity avatar animation powered by DAvtar & Real-ESRGAN</p>
+        </header>
+
+        <div class="content-grid">
+            <!-- Upload Section -->
+            <section class="upload-section">
+                <form id="generate-form">
+                    <div class="file-drop-area" id="video-drop-area">
+                        <span class="file-message">Drag & drop Video here or click to browse</span>
+                        <input type="file" id="video-file" name="video" accept="video/mp4,video/x-m4v,video/*" required>
+                    </div>
+
+                    <div class="file-drop-area" id="audio-drop-area">
+                        <span class="file-message">Drag & drop Audio here or click to browse</span>
+                        <input type="file" id="audio-file" name="audio" accept="audio/*" required>
+                    </div>
+
+                    <div class="toggle-container">
+                        <label class="switch-label">
+                            <input type="checkbox" id="use-esrgan" name="use_esrgan" checked>
+                            <span class="switch"></span>
+                            <span class="label-text">Enable HD Enhancement (Real-ESRGAN)</span>
+                        </label>
+                        <p class="toggle-hint">Disabling this produces a fast standard-definition draft (~2 mins)</p>
+                    </div>
+
+                    <button type="submit" class="primary-btn" id="generate-btn">
+                        <span>Generate HD Video</span>
+                        <div class="loader-spinner hidden" id="btn-spinner"></div>
+                    </button>
+                </form>
+
+                <div class="generation-clock hidden" id="generation-clock" data-state="idle" aria-live="polite">
+                    <span class="generation-clock-signal" aria-hidden="true"></span>
+                    <div class="generation-clock-copy">
+                        <span id="generation-clock-label">Elapsed time</span>
+                        <small id="generation-clock-note">Upload + model pipeline</small>
+                    </div>
+                    <strong id="generation-clock-value">00:00:00</strong>
+                </div>
+
+                <div id="status-container" class="hidden">
+                    <div class="status-indicator">
+                        <div class="spinner"></div>
+                        <p id="status-text">Processing your video. This may take a few minutes depending on your hardware...</p>
+                    </div>
+                </div>
+                <div id="error-container" class="hidden error-message"></div>
+            </section>
+
+            <!-- Result Section -->
+            <section class="result-section">
+                <div class="video-container empty" id="result-container">
+                    <p class="placeholder-text">Your generated video will appear here</p>
+                    <video id="result-video" controls preload="metadata" playsinline class="hidden"></video>
+                </div>
+                <div class="download-container hidden" id="download-actions">
+                    <a id="download-link" href="#" download="davtar_output.mp4" class="secondary-btn">Download Result</a>
+                </div>
+            </section>
+        </div>
+
+        <section class="runtime-console" aria-labelledby="terminal-title">
+            <div class="terminal-toolbar">
+                <div class="terminal-identity">
+                    <span class="terminal-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+                    <div>
+                        <p class="terminal-kicker">PROCESS TELEMETRY</p>
+                        <h2 id="terminal-title">Backend runtime</h2>
+                    </div>
+                </div>
+                <div class="terminal-actions">
+                    <span class="terminal-state" id="terminal-state" data-state="connecting">
+                        <span class="terminal-state-dot"></span>
+                        <span id="terminal-state-label">Connecting</span>
+                    </span>
+                    <button type="button" class="terminal-control" id="terminal-follow" aria-pressed="true">Follow tail</button>
+                    <button type="button" class="terminal-control" id="terminal-pause" aria-pressed="false">Pause</button>
+                    <button type="button" class="terminal-control" id="terminal-clear">Clear view</button>
+                </div>
+            </div>
+            <div class="terminal-output" id="terminal-output" role="log" aria-label="Live backend logs" tabindex="0">
+                <div class="terminal-empty" id="terminal-empty">
+                    <span class="terminal-prompt">›</span>Waiting for backend events…
+                </div>
+            </div>
+            <div class="terminal-footer">
+                <span>Live stream · latest 1,000 events retained</span>
+                <span id="terminal-job">No active job selected</span>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

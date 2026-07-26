@@ -5,12 +5,13 @@ import numpy as np
 
 from .model import BiSeNet
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def init_parser(pth_path):
     n_classes = 19
     net = BiSeNet(n_classes=n_classes)
-    net.cuda()
-    net.load_state_dict(torch.load(pth_path))
+    net.to(device)
+    net.load_state_dict(torch.load(pth_path, map_location=device))
     net.eval()
     return net
 
@@ -26,7 +27,7 @@ def image_to_parsing(img, net):
     img = torch.unsqueeze(img, 0)
 
     with torch.no_grad():
-        img = img.cuda()
+        img = img.to(device)
         out = net(img)[0]
         parsing = out.squeeze(0).cpu().numpy().argmax(0)
         return parsing
