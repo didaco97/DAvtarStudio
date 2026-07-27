@@ -16,14 +16,17 @@ data/*
 frames_wav2lip/*
 frames_hd/*
 input_audios/*
+input_images/*
 input_videos/*
 output_videos_wav2lip/*
 output_videos_hd/*
 temp/*
 videos/*
+logs/
 server*.log
 
 # Preserve checked-in directory documentation
 !input_videos/README.md
+!input_images/README.md
 !temp/README.md
 !checkpoints/readme.md

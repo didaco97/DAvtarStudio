@@ -95,6 +95,15 @@ class JobContractTests(unittest.TestCase):
             asyncio.run(app.generate_video(BackgroundTasks(), video, audio, use_esrgan=False))
         self.assertEqual(error.exception.status_code, 400)
 
+    def test_cancel_marks_processing_job_as_cancelled(self):
+        job_id = "cancelled-job"
+        app.jobs[job_id] = {"status": "processing", "progress": 0, "result_url": None, "error": None}
+
+        response = asyncio.run(app.cancel_generation(job_id))
+
+        self.assertEqual(response["status"], "cancelled")
+        self.assertEqual(app.jobs[job_id]["error"], "Generation was ended by the user")
+
 
 class ProcessorTests(unittest.TestCase):
     def test_subprocess_failure_is_reported_as_pipeline_step(self):

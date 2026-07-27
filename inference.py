@@ -110,21 +110,33 @@ def get_smoothened_boxes(boxes, T):
 		boxes[i] = np.mean(window, axis=0)
 	return boxes
 
-def face_detect(images):
-	detector = face_detection.FaceAlignment(face_detection.LandmarksType._2D, 
-											flip_input=False, device=device)
+# Cached singleton — FaceAlignment is expensive to load; initialise once and reuse.
+_face_detector = None
+_face_det_batch_size = None
 
-	batch_size = args.face_det_batch_size
-	
+def _get_detector():
+	global _face_detector, _face_det_batch_size
+	if _face_detector is None:
+		print('Initialising face detector (once)...')
+		_face_detector = face_detection.FaceAlignment(
+			face_detection.LandmarksType._2D, flip_input=False, device=device)
+		_face_det_batch_size = args.face_det_batch_size
+	return _face_detector, _face_det_batch_size
+
+def face_detect(images):
+	detector, batch_size = _get_detector()
+
 	while 1:
 		predictions = []
 		try:
 			for i in range(0, len(images), batch_size):
 				predictions.extend(detector.get_detections_for_batch(np.array(images[i:i + batch_size])))
 		except RuntimeError:
-			if batch_size == 1: 
+			global _face_det_batch_size
+			if batch_size == 1:
 				raise RuntimeError('Image too big to run face detection on GPU. Please use the --resize_factor argument')
 			batch_size //= 2
+			_face_det_batch_size = batch_size
 			print('Recovering from OOM error; New batch size: {}'.format(batch_size))
 			continue
 		break
@@ -133,51 +145,52 @@ def face_detect(images):
 	pady1, pady2, padx1, padx2 = args.pads
 	for rect, image in zip(predictions, images):
 		if rect is None:
-			cv2.imwrite('temp/faulty_frame.jpg', image) # check this frame where the face was not detected.
+			cv2.imwrite('temp/faulty_frame.jpg', image)
 			raise ValueError('Face not detected! Ensure the video contains a face in all the frames.')
 
 		y1 = max(0, rect[1] - pady1)
 		y2 = min(image.shape[0], rect[3] + pady2)
 		x1 = max(0, rect[0] - padx1)
 		x2 = min(image.shape[1], rect[2] + padx2)
-		
+
 		results.append([x1, y1, x2, y2])
 
 	boxes = np.array(results)
 	if not args.nosmooth: boxes = get_smoothened_boxes(boxes, T=5)
 	results = [[image[y1: y2, x1:x2], (y1, y2, x1, x2)] for image, (x1, y1, x2, y2) in zip(images, boxes)]
-
-	del detector
-	return results 
+	return results
 
 def datagen(mels):
 	img_batch, mel_batch, frame_batch, coords_batch = [], [], [], []
 
-	"""
+	# ------------------------------------------------------------------
+	# Pre-read ALL source frames and run face detection in one batched
+	# pass.  The original code called face_detect() once per mel-chunk
+	# (i.e. once per output frame), and each call re-initialised the
+	# FaceAlignment model from scratch — extremely slow for long videos.
+	# ------------------------------------------------------------------
+	print('Pre-loading frames and running batched face detection...')
+	all_frames = list(read_frames())
+
 	if args.box[0] == -1:
-		if not args.static:
-			face_det_results = face_detect(frames) # BGR2RGB for CNN face detection
+		if args.static:
+			face_det_results = face_detect([all_frames[0]]) * len(all_frames)
 		else:
-			face_det_results = face_detect([frames[0]])
+			face_det_results = face_detect(all_frames)
 	else:
 		print('Using the specified bounding box instead of face detection...')
 		y1, y2, x1, x2 = args.box
-		face_det_results = [[f[y1: y2, x1:x2], (y1, y2, x1, x2)] for f in frames]
-	"""
+		face_det_results = [[f[y1: y2, x1:x2], (y1, y2, x1, x2)] for f in all_frames]
 
-	reader = read_frames()
+	print('Face detection done — {} frames cached'.format(len(face_det_results)))
 
 	for i, m in enumerate(mels):
-		try:
-			frame_to_save = next(reader)
-		except StopIteration:
-			reader = read_frames()
-			frame_to_save = next(reader)
-
-		face, coords = face_detect([frame_to_save])[0]
+		# Cycle through source frames
+		frame_to_save = all_frames[i % len(all_frames)]
+		face, coords = face_det_results[i % len(face_det_results)]
 
 		face = cv2.resize(face, (args.img_size, args.img_size))
-			
+
 		img_batch.append(face)
 		mel_batch.append(m)
 		frame_batch.append(frame_to_save)
@@ -236,8 +249,12 @@ def read_frames():
 		face = cv2.imread(args.face)
 		if face is None:
 			raise RuntimeError(f'Could not read input image: {args.face}')
-		while 1:
-			yield face
+		# A still image is one source frame.  ``datagen`` caches all source
+		# frames with ``list(read_frames())`` and then cycles that cache for the
+		# duration of the audio.  Yielding this image forever prevents that cache
+		# from ever being built, leaving image jobs stuck at 0% before detection.
+		yield face
+		return
 
 	video_stream = cv2.VideoCapture(args.face)
 	if not video_stream.isOpened():

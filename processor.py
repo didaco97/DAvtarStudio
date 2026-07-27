@@ -12,6 +12,47 @@ WAV2LIP_DIR = os.path.dirname(os.path.abspath(__file__))
 REAL_ESRGAN_DIR = os.path.join(WAV2LIP_DIR, "Real-ESRGAN")
 VENV_PYTHON = os.path.join(WAV2LIP_DIR, "venv", "Scripts", "python.exe")
 PIPELINE_LOCK = threading.Lock()
+PROCESS_LOCK = threading.Lock()
+ACTIVE_PROCESSES = {}
+CANCELLED_JOBS = set()
+
+
+class JobCancelledError(RuntimeError):
+    """Raised when a user ends a queued or running generation job."""
+
+
+def is_job_cancelled(job_id):
+    with PROCESS_LOCK:
+        return job_id in CANCELLED_JOBS
+
+
+def clear_job_cancellation(job_id):
+    with PROCESS_LOCK:
+        CANCELLED_JOBS.discard(job_id)
+
+
+def cancel_job(job_id):
+    """Request cancellation and stop the known subprocess tree when present."""
+    with PROCESS_LOCK:
+        CANCELLED_JOBS.add(job_id)
+        process = ACTIVE_PROCESSES.get(job_id)
+
+    if process is None or process.poll() is not None:
+        return False
+
+    if os.name == "nt":
+        # The virtual-environment launcher spawns the actual Python process on
+        # Windows.  taskkill /T ends that child as well, preventing a GPU job
+        # from being orphaned after the UI task is ended.
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    else:
+        process.terminate()
+    return True
 
 
 def _classify_output(message):
@@ -24,6 +65,9 @@ def _classify_output(message):
 
 
 def _run(command, cwd, job_id=None, step=None):
+    if job_id and is_job_cancelled(job_id):
+        raise JobCancelledError("Generation was cancelled before the pipeline started")
+
     step_name = step or (os.path.basename(command[1]) if len(command) > 1 else os.path.basename(command[0]))
     publish_log(f"Starting {step_name}", source="pipeline", job_id=job_id)
     print(f"[pipeline] Starting {step_name}")
@@ -40,8 +84,12 @@ def _run(command, cwd, job_id=None, step=None):
         errors="replace",
         bufsize=1,
     )
-    if process.stdout is not None:
-        try:
+    if job_id:
+        with PROCESS_LOCK:
+            ACTIVE_PROCESSES[job_id] = process
+
+    try:
+        if process.stdout is not None:
             for output_line in process.stdout:
                 message = output_line.strip()
                 if not message:
@@ -53,10 +101,17 @@ def _run(command, cwd, job_id=None, step=None):
                     source=step_name,
                     job_id=job_id,
                 )
-        finally:
             process.stdout.close()
 
-    return_code = process.wait()
+        return_code = process.wait()
+    finally:
+        if job_id:
+            with PROCESS_LOCK:
+                if ACTIVE_PROCESSES.get(job_id) is process:
+                    ACTIVE_PROCESSES.pop(job_id, None)
+
+    if job_id and is_job_cancelled(job_id):
+        raise JobCancelledError("Generation was cancelled by the user")
     if return_code != 0:
         message = f"Pipeline step '{step_name}' failed with exit code {return_code}"
         publish_log(message, level="error", source="pipeline", job_id=job_id)
@@ -76,15 +131,39 @@ def _get_video_fps(video_path):
         raise RuntimeError(f"Could not determine frame rate for: {video_path}")
     return fps
 
-def run_wav2lip_hd_pipeline(video_path, audio_path, base_filename, use_esrgan=True):
+def run_wav2lip_hd_pipeline(
+    video_path,
+    audio_path,
+    base_filename,
+    use_esrgan=True,
+    face_det_batch_size=4,
+    wav2lip_batch_size=64,
+    resize_factor=1,
+):
     if PIPELINE_LOCK.locked():
         publish_log("Waiting for the active GPU job to finish", source="queue", job_id=base_filename)
     with PIPELINE_LOCK:
         publish_log("GPU pipeline lock acquired", source="queue", job_id=base_filename)
-        return _run_wav2lip_hd_pipeline(video_path, audio_path, base_filename, use_esrgan)
+        return _run_wav2lip_hd_pipeline(
+            video_path,
+            audio_path,
+            base_filename,
+            use_esrgan,
+            face_det_batch_size,
+            wav2lip_batch_size,
+            resize_factor,
+        )
 
 
-def _run_wav2lip_hd_pipeline(video_path, audio_path, base_filename, use_esrgan=True):
+def _run_wav2lip_hd_pipeline(
+    video_path,
+    audio_path,
+    base_filename,
+    use_esrgan=True,
+    face_det_batch_size=4,
+    wav2lip_batch_size=64,
+    resize_factor=1,
+):
     require_nonempty_file(video_path, "Input video")
     require_nonempty_file(audio_path, "Input audio")
     require_nonempty_file(VENV_PYTHON, "Virtual-environment Python executable")
@@ -119,7 +198,9 @@ def _run_wav2lip_hd_pipeline(video_path, audio_path, base_filename, use_esrgan=T
         "--face", video_path,
         "--audio", audio_path,
         "--no_sr", "--no_segmentation",
-        "--wav2lip_batch_size", "16",
+        "--face_det_batch_size", str(face_det_batch_size),
+        "--wav2lip_batch_size", str(wav2lip_batch_size),
+        "--resize_factor", str(resize_factor),
         "--outfile", wav2lip_output
     ], cwd=WAV2LIP_DIR, job_id=base_filename, step="Wav2Lip")
     require_nonempty_file(wav2lip_output, "Wav2Lip output")

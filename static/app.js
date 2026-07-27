@@ -1,11 +1,18 @@
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('generate-form');
-    const videoInput = document.getElementById('video-file');
+    const faceInput = document.getElementById('face-file');
     const audioInput = document.getElementById('audio-file');
+    const tabVideo = document.getElementById('tab-video');
+    const tabImage = document.getElementById('tab-image');
+    const faceDropMessage = document.querySelector('#face-drop-area .file-message');
     const useEsrganCheckbox = document.getElementById('use-esrgan');
+    const faceDetectionBatchSize = document.getElementById('face-det-batch-size');
+    const generationBatchSize = document.getElementById('wav2lip-batch-size');
+    const resizeFactor = document.getElementById('resize-factor');
     const btn = document.getElementById('generate-btn');
     const btnText = btn.querySelector('span');
     const btnSpinner = document.getElementById('btn-spinner');
+    const endTaskButton = document.getElementById('end-task-btn');
     const statusContainer = document.getElementById('status-container');
     const statusText = document.getElementById('status-text');
     const generationClock = document.getElementById('generation-clock');
@@ -39,14 +46,42 @@ document.addEventListener('DOMContentLoaded', () => {
     let timerRunId = 0;
 
     const acceptedVideoExtensions = ['.mp4', '.m4v', '.mov', '.avi', '.webm', '.mkv'];
+    const acceptedImageExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
     const acceptedAudioExtensions = ['.wav', '.mp3', '.m4a', '.aac', '.ogg', '.flac'];
+
+    let faceMode = 'video'; // 'video' | 'image'
+
+    function setFaceMode(mode) {
+        faceMode = mode;
+        const isImage = mode === 'image';
+        tabVideo.classList.toggle('active', !isImage);
+        tabVideo.setAttribute('aria-selected', String(!isImage));
+        tabImage.classList.toggle('active', isImage);
+        tabImage.setAttribute('aria-selected', String(isImage));
+        faceInput.accept = isImage ? 'image/jpeg,image/png,image/webp' : 'video/mp4,video/x-m4v,video/*';
+        faceInput.value = '';
+        faceDropMessage.textContent = isImage ? 'Drag & drop Image here or click to browse' : 'Drag & drop Video here or click to browse';
+        faceDropMessage.style.color = '';
+        document.getElementById('face-drop-area').style.borderColor = '';
+    }
+
+    tabVideo.addEventListener('click', () => setFaceMode('video'));
+    tabImage.addEventListener('click', () => setFaceMode('image'));
+
 
     function isAcceptedFile(file, kind) {
         if (!file || file.size <= 0) return false;
-        const extensions = kind === 'video' ? acceptedVideoExtensions : acceptedAudioExtensions;
-        const expectedMimePrefix = `${kind}/`;
+        if (kind === 'face-video') {
+            const lowerName = file.name.toLowerCase();
+            return file.type.startsWith('video/') || acceptedVideoExtensions.some((ext) => lowerName.endsWith(ext));
+        }
+        if (kind === 'face-image') {
+            const lowerName = file.name.toLowerCase();
+            return file.type.startsWith('image/') || acceptedImageExtensions.some((ext) => lowerName.endsWith(ext));
+        }
+        // audio
         const lowerName = file.name.toLowerCase();
-        return file.type.startsWith(expectedMimePrefix) || extensions.some((ext) => lowerName.endsWith(ext));
+        return file.type.startsWith('audio/') || acceptedAudioExtensions.some((ext) => lowerName.endsWith(ext));
     }
 
     function setupDragAndDrop(dropAreaId, inputElement, kind) {
@@ -56,9 +91,10 @@ document.addEventListener('DOMContentLoaded', () => {
         inputElement.addEventListener('change', () => {
             const file = inputElement.files[0];
             if (!file) return;
-            if (!isAcceptedFile(file, kind)) {
+            if (!isAcceptedFile(file, kind === 'face' ? `face-${faceMode}` : kind)) {
                 inputElement.value = '';
-                showError(`Please select a non-empty ${kind} file.`);
+                const label = kind === 'face' ? faceMode : kind;
+                showError(`Please select a non-empty ${label} file.`);
                 return;
             }
             message.textContent = `Selected: ${file.name}`;
@@ -81,8 +117,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         dropArea.addEventListener('drop', (event) => {
             const file = event.dataTransfer.files[0];
-            if (!isAcceptedFile(file, kind)) {
-                showError(`Please drop a non-empty ${kind} file.`);
+            if (!isAcceptedFile(file, kind === 'face' ? `face-${faceMode}` : kind)) {
+                const label = kind === 'face' ? faceMode : kind;
+                showError(`Please drop a non-empty ${label} file.`);
                 return;
             }
             const transfer = new DataTransfer();
@@ -130,10 +167,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const formatted = formatElapsed(elapsed);
         generationClockValue.textContent = formatted;
         generationClock.dataset.state = state;
-        generationClockLabel.textContent = state === 'completed' ? 'Completed in' : 'Stopped after';
-        generationClockNote.textContent = state === 'completed' ? 'Backend generation finished' : 'Generation did not complete';
+        generationClockLabel.textContent = state === 'completed' ? 'Completed in' : state === 'cancelled' ? 'Cancelled after' : 'Stopped after';
+        generationClockNote.textContent = state === 'completed'
+            ? 'Backend generation finished'
+            : state === 'cancelled' ? 'Ended from the dashboard' : 'Generation did not complete';
         logBrowserEvent(
-            `Generation ${state === 'completed' ? 'completed' : 'stopped'} after ${formatted}`,
+            `Generation ${state === 'completed' ? 'completed' : state === 'cancelled' ? 'cancelled' : 'stopped'} after ${formatted}`,
             state === 'completed' ? 'success' : 'warning',
         );
     }
@@ -254,6 +293,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function resetButton() {
         btn.disabled = false;
         btnSpinner.classList.add('hidden');
+        endTaskButton.classList.add('hidden');
+        endTaskButton.disabled = false;
+        endTaskButton.innerHTML = '<span aria-hidden="true">×</span> End task';
         updateModeLabels();
     }
 
@@ -370,6 +412,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 terminalJob.textContent = `Failed job · ${jobId.slice(0, 8)}`;
                 throw new Error(job.error || 'The video pipeline failed.');
             }
+            if (job.status === 'cancelled') {
+                stopGenerationTimer('cancelled', runId);
+                terminalJob.textContent = `Cancelled job · ${jobId.slice(0, 8)}`;
+                throw new Error(job.error || 'Generation was ended.');
+            }
             if (job.status !== 'processing') {
                 throw new Error('The server returned an unknown job status.');
             }
@@ -382,10 +429,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
-        const video = videoInput.files[0];
+        const face = faceInput.files[0];
         const audio = audioInput.files[0];
-        if (!isAcceptedFile(video, 'video') || !isAcceptedFile(audio, 'audio')) {
-            showError('Please select a non-empty video and audio file.');
+        const faceKind = `face-${faceMode}`;
+        if (!isAcceptedFile(face, faceKind) || !isAcceptedFile(audio, 'audio')) {
+            showError(`Please select a non-empty ${faceMode} and audio file.`);
             return;
         }
 
@@ -406,9 +454,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const formData = new FormData();
-            formData.append('video', video);
+            formData.append('face', face);
             formData.append('audio', audio);
             formData.append('use_esrgan', enhanced.toString());
+            formData.append('face_det_batch_size', faceDetectionBatchSize.value);
+            formData.append('wav2lip_batch_size', generationBatchSize.value);
+            formData.append('resize_factor', resizeFactor.value);
             const response = await fetch('/api/generate', { method: 'POST', body: formData, signal });
             if (!response.ok) {
                 throw new Error(await errorMessage(response, 'Failed to start the video job.'));
@@ -420,6 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             activeJobId = body.job_id;
             terminalJob.textContent = `Active job · ${activeJobId.slice(0, 8)}`;
+            endTaskButton.classList.remove('hidden');
 
             await pollStatus(body.job_id, runId, signal, enhanced);
             if (runId === activeRun) statusContainer.classList.add('hidden');
@@ -434,9 +486,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    setupDragAndDrop('video-drop-area', videoInput, 'video');
+    setupDragAndDrop('face-drop-area', faceInput, 'face');
     setupDragAndDrop('audio-drop-area', audioInput, 'audio');
     useEsrganCheckbox.addEventListener('change', updateModeLabels);
+    endTaskButton.addEventListener('click', async () => {
+        if (!activeJobId) return;
+
+        const jobId = activeJobId;
+        endTaskButton.disabled = true;
+        endTaskButton.textContent = 'Ending task…';
+        statusText.textContent = 'Stopping the active pipeline…';
+
+        try {
+            const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' });
+            if (!response.ok) {
+                throw new Error(await errorMessage(response, 'Could not end the generation task.'));
+            }
+            logBrowserEvent('End-task request sent to backend', 'warning');
+        } catch (error) {
+            endTaskButton.disabled = false;
+            endTaskButton.innerHTML = '<span aria-hidden="true">×</span> End task';
+            showError(error.message || 'Could not end the generation task.');
+        }
+    });
     terminalPauseButton.addEventListener('click', () => {
         logsPaused = !logsPaused;
         terminalPauseButton.setAttribute('aria-pressed', logsPaused.toString());

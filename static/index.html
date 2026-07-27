@@ -25,9 +25,21 @@
             <!-- Upload Section -->
             <section class="upload-section">
                 <form id="generate-form">
-                    <div class="file-drop-area" id="video-drop-area">
-                        <span class="file-message">Drag & drop Video here or click to browse</span>
-                        <input type="file" id="video-file" name="video" accept="video/mp4,video/x-m4v,video/*" required>
+                    <div class="face-input-wrapper">
+                        <div class="face-mode-tabs" role="tablist" aria-label="Face input type">
+                            <button type="button" class="face-tab active" id="tab-video" role="tab" aria-selected="true" data-mode="video">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                Video
+                            </button>
+                            <button type="button" class="face-tab" id="tab-image" role="tab" aria-selected="false" data-mode="image">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                Image
+                            </button>
+                        </div>
+                        <div class="file-drop-area" id="face-drop-area">
+                            <span class="file-message">Drag &amp; drop Video here or click to browse</span>
+                            <input type="file" id="face-file" name="face" accept="video/mp4,video/x-m4v,video/*" required>
+                        </div>
                     </div>
 
                     <div class="file-drop-area" id="audio-drop-area">
@@ -44,9 +56,52 @@
                         <p class="toggle-hint">Disabling this produces a fast standard-definition draft (~2 mins)</p>
                     </div>
 
+                    <details class="performance-settings" open>
+                        <summary>
+                            <span>
+                                <small>PERFORMANCE &amp; GPU</small>
+                                <strong>Control memory use and processing speed</strong>
+                            </span>
+                            <span class="settings-chevron" aria-hidden="true">⌄</span>
+                        </summary>
+                        <div class="settings-grid">
+                            <label class="setting-field" for="face-det-batch-size">
+                                <span>Face detection batch</span>
+                                <select id="face-det-batch-size" name="face_det_batch_size">
+                                    <option value="2">2 · safest for 4 GB GPU</option>
+                                    <option value="4" selected>4 · balanced</option>
+                                    <option value="8">8 · faster, higher VRAM</option>
+                                    <option value="16">16 · maximum VRAM</option>
+                                </select>
+                                <small>Lower this first if detection runs out of memory.</small>
+                            </label>
+                            <label class="setting-field" for="wav2lip-batch-size">
+                                <span>Generation batch</span>
+                                <select id="wav2lip-batch-size" name="wav2lip_batch_size">
+                                    <option value="16">16 · safest</option>
+                                    <option value="32">32 · balanced</option>
+                                    <option value="64" selected>64 · fastest</option>
+                                </select>
+                                <small>Controls frames rendered together after detection.</small>
+                            </label>
+                            <label class="setting-field" for="resize-factor">
+                                <span>Video resolution</span>
+                                <select id="resize-factor" name="resize_factor">
+                                    <option value="1" selected>100% · original resolution</option>
+                                    <option value="2">50% · lower VRAM use</option>
+                                    <option value="4">25% · recovery mode</option>
+                                </select>
+                                <small>Applies to video inputs; image inputs stay at original size.</small>
+                            </label>
+                        </div>
+                    </details>
+
                     <button type="submit" class="primary-btn" id="generate-btn">
                         <span>Generate HD Video</span>
                         <div class="loader-spinner hidden" id="btn-spinner"></div>
+                    </button>
+                    <button type="button" class="end-task-btn hidden" id="end-task-btn">
+                        <span aria-hidden="true">×</span> End task
                     </button>
                 </form>
 

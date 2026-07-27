@@ -176,6 +176,94 @@ body {
     font-weight: 300;
 }
 
+/* Performance controls */
+.performance-settings {
+    border: 1px solid rgba(99, 102, 241, 0.34);
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.11), rgba(16, 185, 129, 0.045));
+    overflow: hidden;
+}
+
+.performance-settings summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.95rem 1rem;
+}
+
+.performance-settings summary::-webkit-details-marker { display: none; }
+
+.performance-settings summary small,
+.setting-field > span {
+    color: #94a3b8;
+    font: 600 0.66rem/1.1 'JetBrains Mono', monospace;
+    letter-spacing: 0.11em;
+}
+
+.performance-settings summary strong {
+    display: block;
+    margin-top: 0.26rem;
+    color: #e2e8f0;
+    font-size: 0.92rem;
+}
+
+.settings-chevron {
+    color: #a5b4fc;
+    font-size: 1.35rem;
+    transition: transform 0.2s ease;
+}
+
+.performance-settings:not([open]) .settings-chevron { transform: rotate(-90deg); }
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    padding: 0 1rem 1rem;
+}
+
+.setting-field {
+    display: grid;
+    gap: 0.46rem;
+    min-width: 0;
+    padding: 0.8rem;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 10px;
+    background: rgba(7, 11, 23, 0.42);
+}
+
+.setting-field select {
+    width: 100%;
+    border: 1px solid rgba(129, 140, 248, 0.36);
+    border-radius: 7px;
+    outline: none;
+    padding: 0.54rem 0.6rem;
+    color: #f8fafc;
+    background: #11172a;
+    font: 500 0.73rem/1.2 'JetBrains Mono', monospace;
+    cursor: pointer;
+}
+
+.setting-field select:focus {
+    border-color: #818cf8;
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.16);
+}
+
+.setting-field small {
+    min-height: 2.3em;
+    color: #94a3b8;
+    font-size: 0.72rem;
+    line-height: 1.2;
+}
+
+@media (max-width: 900px) {
+    .settings-grid { grid-template-columns: 1fr; }
+    .setting-field small { min-height: 0; }
+}
+
 /* Buttons */
 .primary-btn {
     width: 100%;
@@ -206,6 +294,30 @@ body {
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
+}
+
+.end-task-btn {
+    width: 100%;
+    margin-top: 0.65rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid rgba(251, 113, 133, 0.45);
+    border-radius: 10px;
+    color: #fda4af;
+    background: rgba(159, 18, 57, 0.12);
+    font: 600 0.88rem/1 'Outfit', sans-serif;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.end-task-btn:hover:not(:disabled) {
+    border-color: #fb7185;
+    color: #ffe4e6;
+    background: rgba(190, 24, 93, 0.24);
+}
+
+.end-task-btn:disabled {
+    cursor: wait;
+    opacity: 0.65;
 }
 
 .secondary-btn {
@@ -514,4 +626,67 @@ input[type='checkbox']:checked + .switch::after { transform: translateX(20px); }
     .terminal-line { grid-template-columns: 72px 58px minmax(0, 1fr); gap: 0.45rem; }
     .terminal-source { display: none; }
     .terminal-footer { align-items: flex-start; flex-direction: column; }
+}
+
+/* Face Input Wrapper (Video / Image tabs) */
+.face-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.face-mode-tabs {
+    display: flex;
+    gap: 0;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--glass-border);
+    border-bottom: none;
+    border-radius: 12px 12px 0 0;
+    padding: 5px;
+    overflow: hidden;
+}
+
+.face-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0.52rem 0.75rem;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+    letter-spacing: 0.02em;
+}
+
+.face-tab svg {
+    flex-shrink: 0;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.face-tab:hover {
+    color: #e2e8f0;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.face-tab:hover svg { opacity: 1; }
+
+.face-tab.active {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(168, 85, 247, 0.25));
+    color: #c7d2fe;
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 0 12px rgba(99, 102, 241, 0.2);
+}
+
+.face-tab.active svg { opacity: 1; }
+
+.face-input-wrapper .file-drop-area {
+    border-radius: 0 0 16px 16px;
+    border-top: none;
 }
